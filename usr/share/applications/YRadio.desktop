@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=YRadio
+Comment=Internet radio
+Exec=/usr/local/bin/yradio
+Icon=/usr/share/pixmaps/internet_radio_48
+Terminal=false
+Categories=AudioVideo;Audio;Player;
+StartupWMClass=yradio

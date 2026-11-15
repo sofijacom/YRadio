@@ -1,0 +1,14 @@
+#!/bin/bash
+
+export LAUNCHDIR="$(cd "$(dirname "$0")"; pwd)"
+#export LAUNCHDIR="$(dirname "$(readlink -f "$0")")"
+export XDG_DATA_DIRS=$LAUNCHDIR/usr/share:/usr/share
+
+cd "$LAUNCHDIR"
+#EXEC=$(grep -m 1 -r Exec= ./*.desktop | cut -d "=" -f 2 | cut -d % -f 1)
+#export LD_LIBRARY_PATH="./lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+#export PATH="./:./usr/bin:$PATH"
+
+#$EXEC "$@"
+pgrep -x "yradio" >/dev/null || ./yradio "$@"
+#./yradio "$@"
