@@ -12,4 +12,4 @@
 - Dependencies: mpv, yad
 
 ## Author
-Rewritten script YRadio , radio player by author's _`@fredx181`_ ► [YRadio](https://forum.puppylinux.com/viewtopic.php?t=8273)
+Rewritten script YRadio , radio player by author's _**`@fredx181`**_ ► [YRadio](https://forum.puppylinux.com/viewtopic.php?t=8273)
