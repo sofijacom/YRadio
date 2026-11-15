@@ -10,3 +10,5 @@
 - The number of buttons on the bottom panel has been reduced.
 - The (Help) button has been moved to the tray icon.
 - Dependencies: mpv, yad
+
+#### Rewritten script YRadio , radio player by author's `@fredx181` [YRadio](https://forum.puppylinux.com/viewtopic.php?t=8273)
