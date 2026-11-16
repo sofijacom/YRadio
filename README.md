@@ -13,3 +13,7 @@
 
 ## Author
 Rewritten script YRadio , radio player by author's $${\color{red}@fredx181}$$ ► [YRadio Internet Radio Player](https://forum.puppylinux.com/viewtopic.php?t=8273)
+
+$${\color{red}\mathbf{@fredx181}}$$
+
+$${\color{red}\text{\textbf{@fredx181}}}$$
