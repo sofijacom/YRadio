@@ -2,6 +2,8 @@
 
 <img width="850" height="478" alt="image" src="image.jpg" />
 
+<img width="850" height="478" alt="image" src="image.png" />
+
 
 - 2026-11-18 v2.0.1, native Wayland support: no X11-only parts any more.
 - (no yad --plug/--paned, no xdotool, no xmessage).
