@@ -21,14 +21,11 @@
 # 2026-11-01 v1.9.6, improvements for the GUI (top part)
 
 # Changed: Yradio, radio player by Sofiya
-# 2026-11-15 v1.9.9, native Wayland support: no X11-only parts any more.
-# (no yad --plug/--paned, no xdotool, no xmessage).
-# GUI is now one normal window (station list); search/load is a dialog, 'now playing' is a desktop notification.
-# The display of the icon on the taskbar has been fixed.
-# The number of buttons on the bottom panel has been reduced.
-# The (Help) button has been moved to the tray icon.
+# 2026-11-18 v2.0.1, native Wayland support: no X11-only parts any more
+# (no GDK_BACKEND=x11, no yad --plug/--paned, no tray icon, no xdotool, no xmessage)
+# GUI is now one normal window (station list); search/load is a dialog, 'now playing'
 
-# NOTE: GTK picks Wayland automatically (and X11 when there's no Wayland)
+# NOTE: do not force GDK_BACKEND=x11 here, GTK picks Wayland automatically (and X11 when there's no Wayland)
 
 # add handler to manage process shutdown
 on_exit () {
@@ -54,6 +51,26 @@ trap 'on_exit' 0 1 2 15
 
 # set directory to launch script from
 export LAUNCHDIR="$(dirname "$(readlink -f "$0")")"
+
+# ./yradio --install-desktop : creates a menu entry; on Wayland the window/taskbar icon comes from it
+if [ "$1" = "--install-desktop" ]; then
+	_ICON="$LAUNCHDIR/icons/internetradio.png"; [ -f "$_ICON" ] || _ICON="audio-x-generic"
+	mkdir -p "$HOME/.local/share/applications"
+	cat > "$HOME/.local/share/applications/yradio.desktop" << DESKTOP_EOF
+[Desktop Entry]
+Type=Application
+Name=YRadio
+Comment=Internet radio
+Exec=$(readlink -f "$0")
+Icon=$_ICON
+Terminal=false
+Categories=AudioVideo;Audio;Player;
+StartupWMClass=yradio
+DESKTOP_EOF
+	command -v update-desktop-database > /dev/null && update-desktop-database "$HOME/.local/share/applications" 2> /dev/null
+	echo "Created $HOME/.local/share/applications/yradio.desktop"
+	exit 0
+fi
 
 # message box without X11-only tools (xmessage/gxmessage don't work natively on Wayland)
 msgbox () {
@@ -975,6 +992,8 @@ check_pid_mplayer
 if [ -n "$pidmplayer" -o -n "$(grep "Stopped\|Paused\|Could not connect to stream" $HOME/.yradio/tmp/onclick 2> /dev/null)" ]; then
 	TRACK="$(sed -n 1p $HOME/.yradio/tmp/onclick 2> /dev/null)"
 	STATION="$(sed -n 2p $HOME/.yradio/tmp/onclick 2> /dev/null)"
+	# tray menu header/tooltip = station + track (only when called from the main script, which holds the tray pipe on fd 5)
+	[ -e /proc/$$/fd/5 ] && tray_menu "${STATION:-YRadio}${TRACK:+ - $TRACK}" >&5
 	# do not repeat the same notification (notification daemons block floods)
 	KEY="$STATION|$TRACK"
 	[ "$1" != "force" ] && [ "$KEY" = "$(cat $HOME/.yradio/tmp/lastnotify 2> /dev/null)" ] && return
@@ -982,7 +1001,8 @@ if [ -n "$pidmplayer" -o -n "$(grep "Stopped\|Paused\|Could not connect to strea
 	# escape markup characters for the notification daemon
 	TRACK="${TRACK//&/&amp;}"; TRACK="${TRACK//</&lt;}"; TRACK="${TRACK//>/&gt;}"
 	STATION="${STATION//&/&amp;}"; STATION="${STATION//</&lt;}"; STATION="${STATION//>/&gt;}"
-	notify-send --app-name="YRadio" --icon="$LAUNCHDIR/icons/internetradio.png" --expire-time=6000 \
+	# notify-send --app-name="YRadio" --icon="$LAUNCHDIR/icons/internetradio.png" --expire-time=6000 \
+	notify-send --app-name="YRadio" --icon="$(ic internetradio.png audio-x-generic)" --expire-time=6000 \
 		--hint=string:x-canonical-private-synchronous:yradio \
 		--hint=string:x-dunst-stack-tag:yradio \
 		"${STATION:-YRadio}" "$TRACK"
@@ -994,27 +1014,37 @@ export -f notify_now
 ic () { if [ -f "$LAUNCHDIR/icons/$1" ]; then echo "$LAUNCHDIR/icons/$1"; else echo "$2"; fi; }
 export -f ic
 
-# Tray icon (yad --notification). yad's tray icon is X11 only (XEmbed), so this one small process is started
-# with GDK_BACKEND=x11 (XWayland). It only shows up if your desktop provides a system tray for such icons
+# Tray icon: yradio_tray.py (Qt, native on Wayland) if PyQt6/PySide6 is installed, otherwise yad's tray icon.
+# yad's tray icon is X11 only (XEmbed), so that fallback is started with GDK_BACKEND=x11 (XWayland). It only shows up if your desktop provides a system tray for such icons
 # (KDE Plasma, XFCE, Cinnamon, MATE, ... or GNOME with an extension that supports it).
 quit_from_tray () {
     kill $(cat "$HOME/.yradio/tmp/pid_list" 2> /dev/null) 2> /dev/null
 }
 export -f quit_from_tray
 
-PIPE="/tmp/${0##*/}.$RANDOM"
-mkfifo "$PIPE"
-exec 5<>"$PIPE"
-#     --image="$LAUNCHDIR/icons/internetradio.png"
-GDK_BACKEND=x11 yad --notification --no-markup \
-    --listen \
-    --image="$(ic internetradio.png audio-radio)" \
-    --text="YRadio" \
-    --icon-size=24 \
-    --command="bash -c 'notify_now force'" \
-    2>/dev/null <&5 &
+PIPE=/tmp/${0##*/}.$RANDOM
+mkfifo $PIPE
+exec 5<> $PIPE
+
+if python3 "$LAUNCHDIR/yradio_tray.py" --check 2> /dev/null; then
+    # native tray icon (StatusNotifierItem, works on Wayland/KDE incl. tooltip), needs PyQt6 or PySide6
+    python3 "$LAUNCHDIR/yradio_tray.py" \
+        --icon "$(ic internet_radio_48.png audio-radio-symbolic)" \
+        --text "YRadio" \
+        --command "bash -c 'notify_now force'" 2> "${YRADIO_TRAY_LOG:-/dev/null}" <&5 &
+else
+    # fallback: yad tray icon through XWayland
+    GDK_BACKEND=x11 yad --notification --no-markup \
+        --listen \
+        --image="$(ic internet_radio_48.png audio-radio)" \
+        --text="YRadio" \
+        --icon-size=24 \
+        --command="bash -c 'notify_now force'" 2> "${YRADIO_TRAY_LOG:-/dev/null}" <&5 &
+fi
 pid_tray=$!
 
+# Tray menu; the first line shows what is playing (tooltips of XWayland tray icons are often not shown)
+tray_menu () {
 echo "menu:Stop Stream! bash -c stop_stream!$(ic stop.png media-playback-stop)| \
 Pause/Play! bash -c pause_stream!$(ic pause_play.png media-playback-pause)| \
 Select Player (mpv or mplayer)! bash -c select_player!$(ic player.png multimedia-player)| \
@@ -1023,12 +1053,15 @@ Volume Control! bash -c yad_alsa_audio!$(ic volume.png audio-volume-high)| \
 Stream Ripping! bash -c rip_stream!$(ic record.png media-record)| \
 Help! bash -c help_info!$(ic gtk-help.png help-browser)| \
 Exit! bash -c quit_from_tray!$(ic quit.png application-exit)" >&5
+}
+export -f tray_menu
+tray_menu "YRadio" >&5
 
 # Search / category dialog (replaces the top part of the old GUI, one single window now)
 search_dialog () {
 _LISTS=$(ls -t $HOME/.yradio/playlist/playlist.*)
 _CATLIST=$(while read -r LIST; do echo "${LIST##*.}" | grep -v 'RadioSure' | tr '\n' '!'; done <<< "${_LISTS}")
-_RES=$(yad --center --title="Search / Load list" --class=yradio --name=yradio --window-icon="$LAUNCHDIR/icons/internet_radio_48.png" --width=500 \
+_RES=$(yad --center --title="Search / Load list" --class=yradio --name=YRadio --window-icon="$(ic internetradio.png audio-x-generic)" --width=500 \
 --text=" Load a playlist, <b>or</b> search stations by name/tag, <b>or</b> select a country.\n If both a search text and a country are given, the search text is used." \
 --form --separator="|" \
 --field=" Playlist:CB" "$_CATLIST" \
@@ -1084,6 +1117,7 @@ pid_loop2=$!
 # so on Wayland there is one ordinary window: the station list with all buttons.
 # Search / category selection is in a dialog (first button), 'now playing' is a desktop notification.
 
+# GDK_BACKEND=x11
 #--button="Search!$(ic list-add.png list-add)!Search / Load list:bash -c search_dialog" \
 #--button="Remove!$(ic gtk-remove.png list-remove)!Remove from current list":'bash -c "remove %s"' \
 #--button="Add!$(ic gtk-new1.png document-new)!Add New To ...:bash -c add_new_station" \
@@ -1098,11 +1132,11 @@ pid_loop2=$!
 #--button="Quit!$(ic quit.png application-exit)!Quit:1" --buttons-layout=center \
 
 yad --list --separator="|" --no-markup \
---title="YRadio v1.9.9" --class=yradio --name=YRadio --window-icon="$(ic internet_radio_48.png audio-x-generic)" \
+--title="YRadio v2.0.1" --class=yradio --name=YRadio --window-icon="$(ic internet_radio_48.png audio-x-generic)" \
 --select-action='bash -c "sel_file %s"' --dclick-action='bash -c "play_url %s"' \
 --tooltip-column=3 --hide-column 1 --search-column=2 \
 --column URL --column Name --column Description \
---text="Double click to play" \
+--text=" Double click to play" \
 --button="Search!$(ic list-add.png list-add)!Search / Load list:bash -c search_dialog" \
 --button="Remove!$(ic gtk-remove.png list-remove)!Remove from current list":'bash -c "remove %s"' \
 --button="Add!$(ic gtk-new1.png document-new)!Add New To ...:bash -c add_new_station" \
