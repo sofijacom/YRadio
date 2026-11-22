@@ -13,7 +13,7 @@
 - The (Help) button has been moved to the tray icon.
 - The YRadio tray icon now changes color to match the theme, and the program name appears when you hover over the icon.
 - An icon has been added to the pop-up notification.
-- Dependencies: mpv, yad
+- Dependencies: mpv, yad, alsa-utils , pulseaudio-utils
 
 ## Author
 Rewritten script YRadio , radio player by author's $${\color{red}\mathbf{@Fredx181}}$$ ► [YRadio Internet Radio Player](https://forum.puppylinux.com/viewtopic.php?t=8273)
